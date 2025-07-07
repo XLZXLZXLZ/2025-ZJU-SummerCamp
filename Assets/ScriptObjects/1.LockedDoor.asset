@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 963258c34f9fcaa4a938ded2ab7ee087, type: 3}
+  m_Name: 1.LockedDoor
+  m_EditorClassIdentifier: 
+  clueID: 1
+  clueName: "\u753B\u5C55\u6B63\u95E8"
+  clueSprite: {fileID: 0}
+  llmPromptHint: "1. \u8FD9\u662F\u753B\u5C55\u6B63\u95E8\uFF0C\u73A9\u5BB6\u9700\u8981\u7B54\u5BF9\u5F53\u524D\u7684\u65F6\u95F4\u5E74\u4EFD\u624D\u80FD\u8FDB\u53BB\u3002\n2.\u4ECA\u5E74\u662F2027\u5E74\u3002"
+  clueDescriptionForPlayer: "\u5229\u5965\u6700\u540E\u4E00\u573A\u753B\u5C55\u7684\u6B63\u95E8\uFF0C\u4E0D\u8FC7\uFF0C\u4F5C\u4E3A\u65F6\u7A7A\u4FA6\u63A2\u7684\u4F60\uFF0C\u4E5F\u8BB8\u9700\u8981\u5148\u786E\u8BA4\u4E00\u4E0B\u5F53\u524D\u7684\u65F6\u95F4\u8282\u70B9\u3002\u786E\u5B9A\u4ECA\u5E74\u7684\u5E74\u4EFD\u540E\uFF0C\u518D\u8FDB\u53BB\u63A2\u7D22\u5427\u3002"

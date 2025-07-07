@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 963258c34f9fcaa4a938ded2ab7ee087, type: 3}
+  m_Name: 3.Invitation
+  m_EditorClassIdentifier: 
+  clueID: 3
+  clueName: "\u82B1\u540D\u518C"
+  clueSprite: {fileID: 0}
+  llmPromptHint: "1.\u8FD9\u662F\u53C2\u5C55\u7684\u82B1\u540D\u518C\uFF0C\u8BB0\u5F55\u4E86\u8FD9\u6B21\u53D7\u9080\u7684\u53C2\u5C55\u8005\u3002\u4ED6\u4EEC\u90FD\u662F\u5F80\u5E74\u7684\u53C2\u5C55\u8005\u3002\n2.\u6253\u52FE\u610F\u5473\u7740\u5230\u573A\u3002\n3.\u4F0A\u8299\u7433\u662F\u753B\u5BB6\u5229\u5965\u7684\u7231\u4EBA\u3002"
+  clueDescriptionForPlayer: "\u4E00\u672C\u53D7\u9080\u53C2\u5C55\u8005\u7684\u82B1\u540D\u518C\u3002\n\u5176\u4E2D\uFF0C\u6253\u52FE\u7684\u540D\u5B57\u6709\uFF1A\n\n\u672A\u6253\u52FE\u7684\u540D\u5B57\u6709\uFF1A\n"

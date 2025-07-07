@@ -3,25 +3,35 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// 一个用于测试InferenceService核心功能的测试脚本。
+/// </summary>
 public class LLMTest : MonoBehaviour
 {
-    [Header("Dependencies")]
-    [Tooltip("对 LLMManager 实例的引用")]
-    [SerializeField] private LLMManager llmManager;
+    [Header("故事数据")]
+    [Tooltip("游戏的主背景故事")]
+    [SerializeField] private StoryBlueprintSO storyBlueprint;
+    [Tooltip("当前要测试的线索")]
+    [SerializeField] private ClueSO currentClue;
 
     [Header("UI Elements")]
     [Tooltip("用户输入消息的输入框")]
     [SerializeField] private InputField messageInputField;
-    [Tooltip("用于发送消息的按钮")]
-    [SerializeField] private Button sendButton;
     [Tooltip("用于显示LLM回复的文本框")]
     [SerializeField] private Text responseText;
+    [Tooltip("用于发送消息的按钮")]
+    [SerializeField] private Button sendButton;
+
+    // 推理服务的实例
+    private InferenceService _inferenceService;
 
     void Start()
     {
+        // 初始化服务
+        _inferenceService = new InferenceService();
+
         if (sendButton != null)
         {
-            // 为按钮添加点击事件监听器
             sendButton.onClick.AddListener(OnSendButtonClick);
         }
         else
@@ -29,9 +39,9 @@ public class LLMTest : MonoBehaviour
             Debug.LogError("UI Button 未在 Inspector 中分配。");
         }
 
-        if (llmManager == null)
+        if (storyBlueprint == null || currentClue == null)
         {
-            Debug.LogError("LLMManager 未在 Inspector 中分配。");
+            Debug.LogError("Story Blueprint 或 Current Clue 未在 Inspector 中分配！");
         }
 
         if (messageInputField == null)
@@ -51,44 +61,38 @@ public class LLMTest : MonoBehaviour
     private void OnSendButtonClick()
     {
         string message = messageInputField.text;
-        if (!string.IsNullOrEmpty(message) && llmManager != null)
+
+        // 确保所有必需的数据都已在Inspector中设置
+        if (string.IsNullOrEmpty(message))
         {
-            Debug.Log("正在发送消息: " + message);
-            if (responseText != null) responseText.text = "思考中...";
-            
-            // 调用 LLMManager 中的 PostRequest 协程，并传入回调函数
-            StartCoroutine(llmManager.PostRequest(message, 
-                // 成功时的回调
-                (response) => {
-                    Debug.Log("收到回复: " + response);
-                    if (responseText != null)
-                    {
-                        responseText.text = response;
-                    }
-                },
-                // 失败时的回调
-                (error) => {
-                    Debug.LogError("请求失败: " + error);
-                    if (responseText != null)
-                    {
-                        responseText.text = "出现错误: " + error;
-                    }
+            Debug.LogWarning("输入框为空，请输入消息。");
+            return;
+        }
+        if (storyBlueprint == null || currentClue == null)
+        {
+            Debug.LogError("Story Blueprint 或 Current Clue 未在 Inspector 中分配！");
+            return;
+        }
+
+        Debug.Log($"正在针对线索 '{currentClue.clueName}' 提问: {message}");
+        if (responseText != null) responseText.text = "思考中...";
+        
+        // 调用InferenceService
+        _inferenceService.AskQuestionAboutClue(storyBlueprint, currentClue, message, 
+            (result) => 
+            {
+                // 将强类型的结果格式化为字符串
+                string formattedResponse = $"评估结果: 【{result.evaluation}】\n解释: {result.explanation}";
+                Debug.Log(formattedResponse);
+
+                if (responseText != null)
+                {
+                    responseText.text = formattedResponse;
                 }
-            ));
-            
-            // 发送后清空输入框
-            messageInputField.text = "";
-        }
-        else
-        {
-            if (string.IsNullOrEmpty(message))
-            {
-                Debug.LogWarning("输入框为空，请输入消息。");
             }
-            if (llmManager == null)
-            {
-                 Debug.LogError("LLMManager 未分配，无法发送消息。");
-            }
-        }
+        );
+        
+        // 发送后清空输入框
+        messageInputField.text = "";
     }
 }

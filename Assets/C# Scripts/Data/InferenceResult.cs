@@ -51,4 +51,47 @@ public struct InferenceResult
 {
     public EvaluationResult evaluation;
     public string explanation;
+}
+
+/// <summary>
+/// 用于从LLM返回的Quiz判断JSON中解析数据的临时类。
+/// </summary>
+[System.Serializable]
+public class QuizJudgeResponse
+{
+    public bool is_correct;
+    public string explanation;
+}
+
+/// <summary>
+/// 用于从LLM返回的最终陈述评分JSON中解析数据的临时类。
+/// </summary>
+[System.Serializable]
+public class FinalVerdictResponse
+{
+    [System.Serializable]
+    public struct MatchedPoint
+    {
+        public string point;
+        public bool matched;
+    }
+    public MatchedPoint[] matches;
+}
+
+/// <summary>
+/// 代表一条完整的、已记录的问答历史。
+/// </summary>
+[System.Serializable]
+public class DialogueRecord
+{
+    public string clueID; // 这条记录属于哪个线索
+    public string question; // 玩家的问题
+    public InferenceResult result; // 最终的推理结果 (包含评估和解释)
+
+    public DialogueRecord(string clueId, string question, InferenceResult result)
+    {
+        this.clueID = clueId;
+        this.question = question;
+        this.result = result;
+    }
 } 

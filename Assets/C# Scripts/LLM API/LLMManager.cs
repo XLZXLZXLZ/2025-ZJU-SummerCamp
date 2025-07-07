@@ -56,14 +56,20 @@ public class LLMManager : Singleton<LLMManager>
         
     }
 
-    /// <summary>
-    /// 向大语言模型发送消息并获取回复
+    /// 向大语言模型发送消息并获取回复的公共入口点。
     /// </summary>
     /// <param name="userMessage">要发送给用户的消息</param>
     /// <param name="onComplete">成功获取回复时调用的回调，参数为回复内容</param>
     /// <param name="onError">发生错误时调用的回调，参数为错误信息</param>
-    /// <returns>一个协程</returns>
-    public IEnumerator PostRequest(string userMessage, System.Action<string> onComplete, System.Action<string> onError)
+    public void SendRequest(string userMessage, System.Action<string> onComplete, System.Action<string> onError)
+    {
+        StartCoroutine(PostRequest(userMessage, onComplete, onError));
+    }
+
+    /// <summary>
+    /// 向大语言模型发送消息并获取回复的私有协程。
+    /// </summary>
+    private IEnumerator PostRequest(string userMessage, System.Action<string> onComplete, System.Action<string> onError)
     {
         // 1. 构建请求体
         RequestData requestData = new RequestData
@@ -93,6 +99,10 @@ public class LLMManager : Singleton<LLMManager>
             if (request.result == UnityWebRequest.Result.Success)
             {
                 string jsonResponse = request.downloadHandler.text;
+
+                // 在解析前打印原始响应，用于调试
+                Debug.Log($"[LLMManager] Raw response received: {jsonResponse}");
+
                 ResponseData responseData = JsonUtility.FromJson<ResponseData>(jsonResponse);
                 if (responseData != null && responseData.choices != null && responseData.choices.Count > 0)
                 {
