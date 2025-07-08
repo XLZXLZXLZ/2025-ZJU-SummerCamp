@@ -1,55 +1,68 @@
+using Game.UI;
 using UnityEngine;
+using DG.Tweening;
+using System.Collections;
 
-/// <summary>
-/// 挂载在2D游戏场景中的可交互物体上。
-/// 点击后会解锁一个线索，并播放特效后自我销毁。
-/// </summary>
-[RequireComponent(typeof(Collider2D))] // 确保物体可以被点击 (2D)
-public class ClueInteractionPoint : MonoBehaviour
+namespace Game.InGame
 {
-    [Header("线索配置")]
-    [Tooltip("点击此物体后要解锁的线索ID。必须与ClueUIPanel中列表里的Clue ID一致。")]
-    [SerializeField] private string clueIDToUnlock;
-
-    [Header("效果配置")]
-    [Tooltip("发现线索时要实例化的粒子效果预制件")]
-    [SerializeField] private GameObject discoveryParticlePrefab;
-
-    private bool _isInteracted = false;
-
-    // 当鼠标点击该物体的Collider时，此方法会被自动调用
-    private void OnMouseDown()
+    /// <summary>
+    /// 代表一个可交互的线索点。
+    /// </summary>
+    public class ClueInteractionPoint : InteractionPointBase
     {
-        // 防止重复点击触发
-        if (_isInteracted) return;
-        _isInteracted = true;
+        [Header("线索点设置")]
+        [SerializeField] private string clueIDToUnlock;
+        
+        [Header("效果配置")]
+        [Tooltip("发现线索时要实例化的粒子效果预制件")]
+        [SerializeField] private GameObject discoveryParticlePrefab;
 
-        // 1. 在场景中找到UI面板的实例，并调用其解锁方法
-        ClueUIPanel cluePanel = FindObjectOfType<ClueUIPanel>();
-        if (cluePanel != null)
+        [SerializeField] private float durationToOpenUI = 0.5f;
+
+        private bool isTriggered = false;
+
+        private void OnMouseDown()
         {
-            if (!string.IsNullOrEmpty(clueIDToUnlock))
+            if (isTriggered) return;
+            isTriggered = true; // 立即设置标志位，防止重复进入协程
+
+            StartCoroutine(InteractionRoutine());
+        }
+
+        private IEnumerator InteractionRoutine()
+        {
+            // 1. 立即触发下一个关联的对象
+            TriggerNextObjects();
+            
+            // 2. 播放粒子效果
+            if (discoveryParticlePrefab != null)
             {
-                cluePanel.UnlockClue(clueIDToUnlock);
-                Debug.Log($"交互点被点击，请求解锁线索: {clueIDToUnlock}");
+                Instantiate(discoveryParticlePrefab, transform.position, Quaternion.identity);
+            }
+            
+            // 3. 禁用碰撞体并播放消失动画
+            var collider = GetComponent<Collider2D>();
+            if (collider != null)
+            {
+                collider.enabled = false;
+            }
+            // 使用基类定义的动画参数，实现平滑缩小至消失
+            transform.DOScale(0, appearDuration).SetEase(appearEase)
+                .OnComplete(() => gameObject.SetActive(false)); // 动画结束后隐藏自己
+
+            // 4. 等待一小段时间，让UI有时间打开
+            yield return new WaitForSeconds(0.3f); 
+            
+            // 5. 找到UI管理器并打开线索面板到指定页面
+            ClueUIPanel cluePanel = ClueUIPanel.Instance;
+            if (cluePanel != null && !string.IsNullOrEmpty(clueIDToUnlock))
+            {
+                cluePanel.OpenAndShowClue(clueIDToUnlock);
             }
             else
             {
-                Debug.LogWarning("这个交互点没有配置要解锁的Clue ID！", this);
+                Debug.LogError("场景中找不到ClueUIPanel或此交互点未配置ClueID！", this);
             }
         }
-        else
-        {
-            Debug.LogError("场景中找不到有效的 ClueUIPanel 实例！", this);
-        }
-
-        // 2. 如果配置了粒子效果，就在当前位置实例化一个
-        if (discoveryParticlePrefab != null)
-        {
-            Instantiate(discoveryParticlePrefab, transform.position, Quaternion.identity);
-        }
-
-        // 3. 完成使命，摧毁自身
-        Destroy(gameObject);
     }
 } 

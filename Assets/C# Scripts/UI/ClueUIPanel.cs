@@ -7,7 +7,7 @@ using DG.Tweening;
 /// <summary>
 /// 控制核心线索UI面板的显示和交互。
 /// </summary>
-public class ClueUIPanel : MonoBehaviour
+public class ClueUIPanel : Singleton<ClueUIPanel>
 {
     [Header("UI引用")]
     [SerializeField] private Image clueImage;
@@ -52,8 +52,10 @@ public class ClueUIPanel : MonoBehaviour
     // 用于从外部（如DialogueRecordUI）请求刷新的静态事件
     public static Action OnRequestRefresh;
 
-    private void Awake()
+    protected override void Awake()
     {
+        base.Awake();
+
         _inferenceService = new InferenceService();
         // 订阅刷新事件
         OnRequestRefresh += () => RefreshCurrentPage();
@@ -199,7 +201,55 @@ public class ClueUIPanel : MonoBehaviour
             }
         }
     }
+
+    /// <summary>
+    /// 【核心功能】打开UI面板并直接跳转到指定线索的页面。
+    /// </summary>
+    /// <param name="clueId">要显示的线索ID。</param>
+    public void OpenAndShowClue(string clueId)
+    {
+        // 1. 确保该线索已被解锁
+        UnlockClue(clueId);
+
+        // 2. 找到该线索对应的页码
+        int targetIndex = allClues.FindIndex(clue => clue.clueID == clueId);
+
+        if (targetIndex == -1)
+        {
+            Debug.LogError($"无法在AllClues列表中找到ID为 {clueId} 的线索！", this);
+            return;
+        }
+
+        // 3. 设置当前页码
+        _currentPageIndex = targetIndex;
+
+        // 4. 如果面板没打开，则播放动画打开它；如果已打开，则直接刷新到新页面
+        if (!_isPanelOpen)
+        {
+            TogglePanel(); // TogglePanel会自动处理打开动画和刷新
+        }
+        else
+        {
+            RefreshCurrentPage(); // 如果已经打开，就地刷新
+        }
+    }
     
+    /// <summary>
+    /// 【辅助方法】解锁一个线索并返回该线索的数据对象。
+    /// </summary>
+    public ClueSO UnlockAndGetClue(string clueId)
+    {
+        UnlockClue(clueId);
+        foreach (var clue in allClues)
+        {
+            if (clue.clueID == clueId)
+            {
+                return clue;
+            }
+        }
+        return null;
+    }
+
     private void RefreshCurrentPage()
     {
         DisplayPage(_currentPageIndex);
