@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using UnityEngine;
+using BigBata.Data;
 
 /// <summary>
 /// 负责处理与LLM推理相关的核心逻辑。
@@ -23,10 +24,12 @@ public class InferenceService
 你是一个侦探游戏中的AI助手“答案之书”。你的任务是根据我提供的【故事最终真相】和【当前线索的核心事实】，来评估【玩家的提问】。
 
 # 核心规则
-1.  **判断严格基于当前线索**：你的评估（CompletelyCorrect, PartiallyCorrect, Incorrect）必须**主要**依据【当前线索的核心事实】。
-2.  **参考最终真相**：你可以参考【故事最终真相】来理解一个问题的背景，但如果一个问题的事实正确，而与**当前线索**无关，则应判定为 `Irrelevant` (无关)。这是为了引导玩家专注于当前线索。
-3.  **拒绝开放性问题**：严格拒绝回答任何需要主观解释或叙事的开放性问题（例如“为什么会这样？”、“后来怎么样了？”），这类问题应被判定为 `Irrelevant`。
-4.  **JSON格式输出**：你的回答必须是严格的JSON格式，不包含任何Markdown标记。
+1.  **扮演严格的逻辑裁判**：你的唯一任务是判断【玩家的提问】作为一句**陈述句**，其事实真伪。你不是一个乐于助人的对话助手。
+2.  **严格基于事实进行真伪判断**：你的评估（CompletelyCorrect, PartiallyCorrect, Incorrect）必须**唯一**依据【当前线索的核心事实】进行逻辑判断。
+3.  **明确处理否定情况**：如果【当前线索的核心事实】是一个否定事实（例如，“画架没有在使用”），而【玩家的提问】是一个肯定陈述（例如，“画架还在使用吗？”），那么这个提问的逻辑判断结果**必须**是 `Incorrect`。反之亦然。
+4.  **参考最终真相**：你可以参考【故事最终真相】来理解一个问题的背景，如果一个问题与**当前线索**完全无关，则应判定为 `Irrelevant` (无关)。。
+5.  **尽量给出判断**：谨慎给出 `Irrelevant`的判断，对于用户提出的比较宽泛的问题，尽量做出一个
+6.  **JSON格式输出**：你的回答必须是严格的JSON格式，不包含任何Markdown标记。
 
 ---
 # 背景信息
@@ -151,80 +154,93 @@ public class InferenceService
         return cleaned;
     }
 
-    #region Truth Assessment Methods
-
-    /// <summary>
-    /// 判断玩家对一个具体问题的回答是否正确（小测验模式）。
-    /// </summary>
-    public void JudgePlayerAnswer(string question, string correctAnswer, string playerAnswer, System.Action<bool, string> onComplete)
+    public void JudgePlayerAnswer(string question, string playerAnswer, string successCondition, Action<EvaluationResult> callback)
     {
-        string prompt = BuildQuizJudgePrompt(question, correctAnswer, playerAnswer);
-        LLMManager.Instance.SendRequest(prompt, 
-            (responseJson) => {
-                try
-                {
-                    string cleanedJson = CleanLLMResponse(responseJson);
-                    QuizJudgeResponse response = JsonUtility.FromJson<QuizJudgeResponse>(cleanedJson);
-                    onComplete?.Invoke(response.is_correct, response.explanation);
-                }
-                catch(System.Exception ex)
-                {
-                    Debug.LogError($"[InferenceService] JudgePlayerAnswer Error: {ex.Message}. Raw response: {responseJson}");
-                    onComplete?.Invoke(false, "判断时发生错误。");
-                }
-            }, 
-            (error) => {
-                onComplete?.Invoke(false, "判断时发生错误。");
+        var prompt = new StringBuilder();
+        prompt.AppendLine("你是一个逻辑判断程序。你的任务是根据提供的“问题”、“玩家的回答”和“评判标准”，判断玩家的回答是否满足标准。");
+        prompt.AppendLine("你的回答必须遵循以下规则：");
+        prompt.AppendLine("1. 你的回答必须是一个JSON对象。");
+        prompt.AppendLine("2. JSON对象必须包含两个字段：\"evaluation\" 和 \"reason\"。");
+        prompt.AppendLine("3. \"evaluation\" 字段的值必须是以下五个字符串之一：\"CompletelyCorrect\", \"PartiallyCorrect\", \"Incorrect\", \"Irrelevant\", \"Noncommittal\"。");
+        prompt.AppendLine("   - \"CompletelyCorrect\": 玩家的回答完全命中了评判标准。");
+        prompt.AppendLine("   - \"Incorrect\": 玩家的回答未命中评判标准。");
+        prompt.AppendLine("   - 在你的判断中，请优先使用 \"CompletelyCorrect\" 和 \"Incorrect\"。只在玩家的回答部分正确或与问题无关时，才使用其他选项。");
+        prompt.AppendLine("4. \"reason\" 字段需要简单解释你做出判断的原因。");
+        prompt.AppendLine("\n--- 输入信息 ---");
+        prompt.AppendLine($"问题: \"{question}\"");
+        prompt.AppendLine($"玩家的回答: \"{playerAnswer}\"");
+        prompt.AppendLine($"评判标准: \"{successCondition}\"");
+        prompt.AppendLine("\n--- 你的输出 ---");
+        prompt.AppendLine("{\"evaluation\": \"...\", \"reason\": \"...\"}");
+
+        LLMManager.Instance.SendRequest(prompt.ToString(), (response) =>
+        {
+            try
+            {
+                var result = JsonUtility.FromJson<InferenceResult>(CleanLLMResponse(response));
+                callback?.Invoke(result.evaluation);
             }
-        );
+            catch (Exception e)
+            {
+                Debug.LogError($"解析玩家答案评估结果失败: {e.Message}");
+                callback?.Invoke(EvaluationResult.Noncommittal);
+            }
+        },
+        (response) =>
+        {
+            Debug.LogError("响应失败");
+        });
     }
 
-    /// <summary>
-    /// 对玩家的最终真相陈述进行打分。
-    /// </summary>
-    public void ScoreFinalVerdict(System.Collections.Generic.List<string> scoringPoints, string playerVerdict, System.Action<int, System.Collections.Generic.List<string>> onComplete)
+    public void EvaluateFinalTheory(string playerTheory, Action<TheoryEvaluationResult> callback)
     {
-        string prompt = BuildFinalVerdictPrompt(scoringPoints, playerVerdict);
-        LLMManager.Instance.SendRequest(prompt,
-            (responseJson) => {
+        var storyBlueprint = GameManager.Instance.currentStory;
+        if (storyBlueprint == null || string.IsNullOrEmpty(storyBlueprint.fullStorySolution))
+        {
+            Debug.LogError("未能获取完整故事背景。");
+            callback?.Invoke(new TheoryEvaluationResult { similarity = 0, reason = "内部错误：无法加载故事。" });
+            return;
+        }
+
+        string fullStory = storyBlueprint.fullStorySolution;
+
+        var prompt = new StringBuilder();
+        prompt.AppendLine("你是一位严格的、专业的侦探游戏裁判。你的任务是评估玩家对整个案件真相的猜测与标准答案之间的相似度。");
+        prompt.AppendLine("你需要根据以下“标准答案”和“玩家的猜测”，给出一个0.0到1.0之间的浮点数“相似度”评分，并给出你评分的“理由”。");
+        prompt.AppendLine("评分标准：");
+        prompt.AppendLine("- 1.0: 玩家的猜测完全准确，所有关键情节、动机和人物关系都正确。");
+        prompt.AppendLine("- 0.7-0.9: 玩家的猜测大致正确，抓住了核心真相，但可能遗漏了一些次要细节或在动机上有轻微偏差。");
+        prompt.AppendLine("- 0.4-0.6: 玩家的猜测部分正确，理解了故事的某些片段，但对核心情节有重大误解。");
+        prompt.AppendLine("- 0.0-0.3: 玩家的猜测基本上是错误的。");
+        prompt.AppendLine("\n--- 标准答案 ---");
+        prompt.AppendLine(fullStory);
+        prompt.AppendLine("\n--- 玩家的猜测 ---");
+        prompt.AppendLine(playerTheory);
+        prompt.AppendLine("\n--- 你的输出 ---");
+        prompt.AppendLine("请严格按照以下JSON格式输出你的评判结果，不要添加任何额外的解释：");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"similarity\": <你的评分, 一个浮点数>,");
+        prompt.AppendLine("  \"reason\": \"<你做出该评分的简要理由>\"");
+        prompt.AppendLine("}");
+
+        LLMManager.Instance.SendRequest(prompt.ToString(),
+            (response) =>
+            {
                 try
                 {
-                    string cleanedJson = CleanLLMResponse(responseJson);
-                    FinalVerdictResponse response = JsonUtility.FromJson<FinalVerdictResponse>(cleanedJson);
-                    int score = 0;
-                    var matchedPoints = new System.Collections.Generic.List<string>();
-                    foreach(var item in response.matches)
-                    {
-                        if(item.matched)
-                        {
-                            score++;
-                            matchedPoints.Add(item.point);
-                        }
-                    }
-                    onComplete?.Invoke(score, matchedPoints);
+                    var result = JsonUtility.FromJson<TheoryEvaluationResult>(CleanLLMResponse(response));
+                    callback?.Invoke(result);
                 }
-                catch(System.Exception ex)
+                catch (Exception e)
                 {
-                     Debug.LogError($"[InferenceService] ScoreFinalVerdict Error: {ex.Message}. Raw response: {responseJson}");
-                    onComplete?.Invoke(0, null);
+                    Debug.LogError($"解析最终理论评估结果失败: {e.Message}");
+                    callback?.Invoke(new TheoryEvaluationResult { similarity = 0, reason = "无法解析裁判的反馈。" });
                 }
             },
-            (error) => {
-                onComplete?.Invoke(0, null);
-            }
-        );
+            (response) =>
+            {
+                Debug.LogError("最终理论评估请求响应失败");
+                callback?.Invoke(new TheoryEvaluationResult { similarity = 0, reason = "与裁判的连接中断。" });
+            });
     }
-
-    private string BuildQuizJudgePrompt(string question, string correctAnswer, string playerAnswer)
-    {
-        return $"你是一个游戏裁判。请判断【玩家的回答】在语义上是否回答了【问题】，并且意思上是否与【标准答案】一致。你的回答必须是一个JSON，格式为：{{\"is_correct\": true/false, \"explanation\": \"一句话解释\"}}。\n\n【问题】:{question}\n【标准答案】:{correctAnswer}\n【玩家的回答】:{playerAnswer}";
-    }
-
-    private string BuildFinalVerdictPrompt(System.Collections.Generic.List<string> scoringPoints, string playerVerdict)
-    {
-        string pointsStr = string.Join("\", \"", scoringPoints);
-        return $"你是一个游戏裁判。请仔细阅读【玩家的最终陈述】，并判断该陈述在语义上是否清晰地覆盖了【得分点列表】中的每一个要点。你的回答必须是一个JSON对象，其格式为：{{\"matches\": [ {{\"point\": \"得分点内容\", \"matched\": true/false}}, ... ]}}。\n\n【得分点列表】:[\"{pointsStr}\"]\n【玩家的最终陈述】:{playerVerdict}";
-    }
-
-    #endregion
 } 

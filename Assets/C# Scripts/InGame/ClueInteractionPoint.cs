@@ -17,7 +17,7 @@ namespace Game.InGame
         [Tooltip("发现线索时要实例化的粒子效果预制件")]
         [SerializeField] private GameObject discoveryParticlePrefab;
 
-        [SerializeField] private float durationToOpenUI = 0.5f;
+        //[SerializeField] private float durationToOpenUI = 0.5f;
 
         private bool isTriggered = false;
 

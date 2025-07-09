@@ -16,6 +16,7 @@ public class ClueUIPanel : Singleton<ClueUIPanel>
     [SerializeField] private Button sendButton;
     [SerializeField] private Button nextPageButton;
     [SerializeField] private Button prevPageButton;
+    [SerializeField] private Button closeButton; // 新增关闭按钮
     [SerializeField] private RecordAreaManager recordArea;
 
     [Header("线索数据")]
@@ -83,6 +84,7 @@ public class ClueUIPanel : Singleton<ClueUIPanel>
         sendButton.onClick.AddListener(OnSendButtonClick);
         nextPageButton.onClick.AddListener(GoToNextPage);
         prevPageButton.onClick.AddListener(GoToPrevPage);
+        if (closeButton != null) closeButton.onClick.AddListener(HidePanel); // 绑定事件
 
         // 绑定测试按钮的事件
         if(debugUnlockButton) debugUnlockButton.onClick.AddListener(DebugUnlockCurrentClue);
@@ -106,19 +108,19 @@ public class ClueUIPanel : Singleton<ClueUIPanel>
     /// </summary>
     public void TogglePanel()
     {
-        _isPanelOpen = !_isPanelOpen;
         if (_isPanelOpen)
         {
-            ShowPanel();
+            HidePanel();
         }
         else
         {
-            HidePanel();
+            ShowPanel();
         }
     }
 
     private void ShowPanel()
     {
+        _isPanelOpen = true;
         _panelRectTransform.DOAnchorPos(_onScreenPosition, animationDuration).SetEase(easeType);
         // 打开面板时，刷新显示内容
         RefreshCurrentPage();
@@ -126,6 +128,7 @@ public class ClueUIPanel : Singleton<ClueUIPanel>
 
     private void HidePanel()
     {
+        _isPanelOpen = false;
         _panelRectTransform.DOAnchorPos(_offScreenPosition, animationDuration).SetEase(easeType);
     }
 
@@ -141,7 +144,7 @@ public class ClueUIPanel : Singleton<ClueUIPanel>
         recordArea.AddPendingRecord(question);
         
         // 调用推理服务
-        _inferenceService.AskQuestionAboutClue(GameManager.Instance.CurrentStory, currentClue, question, (result) =>
+        _inferenceService.AskQuestionAboutClue(GameManager.Instance.currentStory, currentClue, question, (result) =>
         {
             // 5.2 提交完整记录
             DialogueHistoryManager.Instance.CommitCompletedQuestion(question, result);
@@ -250,6 +253,13 @@ public class ClueUIPanel : Singleton<ClueUIPanel>
         return null;
     }
 
+    /// 【辅助方法】提供所有线索数据给外部测试脚本使用。
+    /// </summary>
+    public List<ClueSO> GetAllCluesForTest()
+    {
+        return allClues;
+    }
+    
     private void RefreshCurrentPage()
     {
         DisplayPage(_currentPageIndex);

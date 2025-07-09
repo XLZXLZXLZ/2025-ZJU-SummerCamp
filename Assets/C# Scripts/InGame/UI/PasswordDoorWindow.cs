@@ -8,17 +8,18 @@ namespace Game.UI
     public class PasswordDoorWindow : PopupWindowBase
     {
         [Header("密码门 UI 组件")]
-        [SerializeField] private InputField passwordInputField;
-        [SerializeField] private Button confirmButton;
-        [SerializeField] private Text hintText; // 用于显示诗歌等提示
+        [SerializeField] protected InputField passwordInputField;
+        [SerializeField] protected Button confirmButton;
+        [SerializeField] protected Button closeButton; // 新增关闭按钮
+        [SerializeField] protected Text hintText; // 用于显示诗歌等提示
 
         [Header("密码设置")]
-        [SerializeField] private string correctPassword;
+        [SerializeField] protected string correctPassword;
 
         /// <summary>
         /// 当输入正确密码时触发的事件
         /// </summary>
-        public event Action OnPasswordCorrect;
+        public Action OnPasswordCorrect;
 
         protected override void Awake()
         {
@@ -27,6 +28,10 @@ namespace Game.UI
             if (confirmButton != null)
             {
                 confirmButton.onClick.AddListener(CheckPassword);
+            }
+            if (closeButton != null)
+            {
+                closeButton.onClick.AddListener(Hide); // 点击时调用基类的Hide方法
             }
 
             if (passwordInputField != null)
@@ -41,6 +46,10 @@ namespace Game.UI
             if (confirmButton != null)
             {
                 confirmButton.onClick.RemoveListener(CheckPassword);
+            }
+            if (closeButton != null)
+            {
+                closeButton.onClick.RemoveListener(Hide);
             }
             if (passwordInputField != null)
             {
@@ -70,7 +79,7 @@ namespace Game.UI
             }
         }
 
-        private void CheckPassword()
+        protected virtual void CheckPassword()
         {
             if (passwordInputField.text == correctPassword)
             {

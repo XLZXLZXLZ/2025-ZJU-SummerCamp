@@ -16,6 +16,11 @@ public abstract class PopupWindowBase : MonoBehaviour
     protected Vector2 onScreenPosition;
     protected Vector2 offScreenPosition;
     
+    /// <summary>
+    /// 窗口当前是否可见。
+    /// </summary>
+    public bool IsVisible => gameObject.activeSelf;
+
     protected virtual void Awake()
     {
         panelRectTransform = GetComponent<RectTransform>();

@@ -1,4 +1,5 @@
 using UnityEngine;
+using Game; // 引入Game命名空间以访问GameManager
 
 namespace Game.InGame
 {
@@ -9,7 +10,7 @@ namespace Game.InGame
     public abstract class RevealableBase : MonoBehaviour
     {
         [Header("可揭示对象 基类设置")]
-        [Tooltip("如果勾选，此对象将在游戏开始时就可见。")]
+        [Tooltip("如果勾选，此对象将在游戏正式开始时（入场动画结束后）自动显示。")]
         [SerializeField] protected bool initiallyVisible = false;
 
         [Tooltip("对象出现时使用的动画时长。")]
@@ -19,10 +20,33 @@ namespace Game.InGame
 
         protected virtual void Awake()
         {
-            if (!initiallyVisible)
+            // 所有可揭示对象，在唤醒时都先将自己隐藏
+            PrepareForReveal();
+        }
+        
+        protected virtual void Start()
+        {
+            // 如果被标记为“初始可见”，则订阅GameManager的游戏开始事件
+            if (initiallyVisible)
             {
-                // 如果不是初始可见，则调用子类实现的准备方法
-                PrepareForReveal();
+                GameManager.OnGameStarted += ShowOnGameStart;
+            }
+        }
+
+        private void ShowOnGameStart()
+        {
+            // 收到游戏开始事件后，调用自身的Show方法
+            Show();
+            // 调用后即可取消订阅，避免不必要的麻烦
+            GameManager.OnGameStarted -= ShowOnGameStart;
+        }
+
+        protected virtual void OnDestroy()
+        {
+            // 在对象被销毁时，确保取消订阅，防止内存泄漏
+            if (initiallyVisible)
+            {
+                GameManager.OnGameStarted -= ShowOnGameStart;
             }
         }
 
