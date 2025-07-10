@@ -11,6 +11,9 @@ namespace Game.InGame
         [Header("通用交互点设置")]
         [Tooltip("点击后要打开的UI窗口。这个UI窗口需要挂载一个继承自PopupWindowBase的脚本。")]
         [SerializeField] private PopupWindowBase interactiveUI;
+        
+        [Tooltip("【可选】当交互成功完成后，在原地生成的粒子效果预制件。")]
+        [SerializeField] private GameObject completionParticlePrefab;
 
         private bool isCompleted = false;
 
@@ -38,14 +41,26 @@ namespace Game.InGame
 
         private void HandlePasswordCorrect()
         {
-            // 当密码被正确输入后，这个方法会被调用
-            TriggerNextObjectsAndDisable();
+            if (isCompleted) return;
+            isCompleted = true;
+
+            // 1. 触发后续对象
+            TriggerNextObjects();
+
+            // 2. 实例化粒子效果
+            if (completionParticlePrefab != null)
+            {
+                Instantiate(completionParticlePrefab, transform.position, Quaternion.identity);
+            }
             
-            // 清理工作：取消订阅事件
+            // 3. 清理工作：取消订阅事件
             if (interactiveUI is PasswordDoorWindow passwordWindow)
             {
                 passwordWindow.OnPasswordCorrect -= HandlePasswordCorrect;
             }
+
+            // 4. 摧毁自身
+            Destroy(gameObject);
         }
 
         private void TriggerNextObjectsAndDisable()

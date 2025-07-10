@@ -115,3 +115,19 @@
             this.result = result;
         }
     }
+
+    /// <summary>
+    /// 【新】用于RAG全局问答的、经过处理和验证的强类型结果。
+    /// </summary>
+    public struct RAGResponse
+    {
+        /// <summary>
+        /// LLM生成的自然语言回答。
+        /// </summary>
+        public string answer;
+
+        /// <summary>
+        /// LLM在生成回答时，主要参考的线索ID列表。
+        /// </summary>
+        public string[] sourceClueIDs;
+    }

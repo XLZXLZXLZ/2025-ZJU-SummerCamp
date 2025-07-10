@@ -24,4 +24,8 @@ public class ClueSO : ScriptableObject
     [Tooltip("这里填写给玩家看的美化过的、充满文学性的描述。")]
     [TextArea(10, 20)]
     public string clueDescriptionForPlayer;
+
+    [Header("玩法机制")]
+    [Tooltip("如果勾选此项，对该线索的提问将启用RAG（检索增强生成），允许AI调用全局信息来回答跨线索的复杂问题。通常只为游戏最终阶段的特殊“线索”开启。")]
+    public bool useGlobalRAG = false;
 } 

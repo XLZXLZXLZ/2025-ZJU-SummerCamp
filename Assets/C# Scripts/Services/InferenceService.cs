@@ -2,6 +2,8 @@ using System;
 using System.Text;
 using UnityEngine;
 using BigBata.Data;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 /// <summary>
 /// 负责处理与LLM推理相关的核心逻辑。
@@ -183,16 +185,17 @@ public class InferenceService
             catch (Exception e)
             {
                 Debug.LogError($"解析玩家答案评估结果失败: {e.Message}");
-                callback?.Invoke(EvaluationResult.Noncommittal);
+                callback?.Invoke(EvaluationResult.Unexpected);
             }
         },
-        (response) =>
+        (error) =>
         {
-            Debug.LogError("响应失败");
+            Debug.LogError($"调用LLM判断玩家答案失败: {error}");
+            callback?.Invoke(EvaluationResult.Unexpected);
         });
     }
 
-    public void EvaluateFinalTheory(string playerTheory, Action<TheoryEvaluationResult> callback)
+    public void EvaluateFinalTheory(string playerTheory, List<string> keyPoints, Action<TheoryEvaluationResult> callback)
     {
         var storyBlueprint = GameManager.Instance.currentStory;
         if (storyBlueprint == null || string.IsNullOrEmpty(storyBlueprint.fullStorySolution))
@@ -212,6 +215,17 @@ public class InferenceService
         prompt.AppendLine("- 0.7-0.9: 玩家的猜测大致正确，抓住了核心真相，但可能遗漏了一些次要细节或在动机上有轻微偏差。");
         prompt.AppendLine("- 0.4-0.6: 玩家的猜测部分正确，理解了故事的某些片段，但对核心情节有重大误解。");
         prompt.AppendLine("- 0.0-0.3: 玩家的猜测基本上是错误的。");
+
+        if (keyPoints != null && keyPoints.Count > 0)
+        {
+            prompt.AppendLine("\n【关键信息】");
+            prompt.AppendLine("你评分的标准是关注玩家的猜测中是否提及以下关键信息。如果这几点基本回答正确，即为满分。如果答到大部分，也应当得到一个较高的评分。");
+            foreach (var keyPoint in keyPoints)
+            {
+                prompt.AppendLine($"- {keyPoint}");
+            }
+        }
+
         prompt.AppendLine("\n--- 标准答案 ---");
         prompt.AppendLine(fullStory);
         prompt.AppendLine("\n--- 玩家的猜测 ---");
@@ -243,4 +257,124 @@ public class InferenceService
                 callback?.Invoke(new TheoryEvaluationResult { similarity = 0, reason = "与裁判的连接中断。" });
             });
     }
+
+    #region RAG - 全局问答系统
+    
+    /// <summary>
+    /// 针对一个全局性的、跨线索的陈述，利用RAG流程进行真伪评估。
+    /// 如果找不到相关线索，会自动降级为对当前线索的标准问答。
+    /// </summary>
+    /// <param name="story">完整的故事背景</param>
+    /// <param name="clue">当前聚焦的线索（用于降级）</param>
+    /// <param name="playerStatement">玩家提出的陈述或假设</param>
+    /// <param name="onComplete">完成时的回调，返回一个强类型的InferenceResult</param>
+    /// <param name="maxContextClues">最多检索的相关线索数量</param>
+    public void EvaluateGlobalStatement(StoryBlueprintSO story, ClueSO clue, string playerStatement, System.Action<InferenceResult> onComplete, int maxContextClues = 3)
+    {
+        // 1. 调用向量数据库，检索最相关的线索作为上下文
+        VectorDatabaseService.Instance.FindMostRelevantClues(playerStatement, 
+            (contextClues) =>
+            {
+                // 如果找不到任何相关线索，则降级为对当前线索的标准问答模式
+                if (contextClues == null || contextClues.Count == 0)
+                {
+                    Debug.Log("[InferenceService] 未找到相关上下文线索，RAG模式已降级为对当前线索的标准问答。");
+                    AskQuestionAboutClue(story, clue, playerStatement, onComplete);
+                    return;
+                }
+
+                Debug.Log($"[InferenceService] RAG模式已启动，找到 {contextClues.Count} 条相关线索。");
+
+                // 2. 动态构建RAG评估用的Prompt
+                string prompt = BuildRAGEvaluationPrompt(playerStatement, contextClues);
+
+                Debug.Log("RAG调用的prompt:" + prompt);
+
+                // 3. 调用LLM进行生成
+                LLMManager.Instance.SendRequest(prompt, 
+                    (responseJson) =>
+                    {
+                        // 4. 解析返回的JSON
+                        try
+                        {
+                            // 复用已有的清理和解析逻辑
+                            onComplete?.Invoke(ParseAndValidateResponse(responseJson));
+                        }
+                        catch (System.Exception ex)
+                        {
+                            Debug.LogError($"[InferenceService] RAG评估响应JSON解析失败: {ex.Message}. Raw response: {responseJson}");
+                            onComplete?.Invoke(new InferenceResult
+                            {
+                                evaluation = EvaluationResult.Unexpected,
+                                explanation = "抱歉，我似乎有点混乱，无法对这个复杂的猜想做出判断。"
+                            });
+                        }
+                    },
+                    (error) =>
+                    {
+                        Debug.LogError($"[InferenceService] RAG评估LLM请求失败: {error}");
+                        onComplete?.Invoke(new InferenceResult
+                        {
+                            evaluation = EvaluationResult.Unexpected,
+                            explanation = "抱歉，我暂时无法连接到“答案之书”的核心。"
+                        });
+                    }
+                );
+            },
+            (error) =>
+            {
+                Debug.LogError($"[InferenceService] RAG检索相关线索失败: {error}");
+                onComplete?.Invoke(new InferenceResult
+                {
+                    evaluation = EvaluationResult.Unexpected,
+                    explanation = "抱歉，我在查阅资料时遇到了困难。"
+                });
+            },
+            maxContextClues
+        );
+    }
+
+    /// <summary>
+    /// 根据检索到的上下文线索和玩家陈述，动态构建一个用于RAG评估的Prompt。
+    /// </summary>
+    private string BuildRAGEvaluationPrompt(string playerStatement, List<ClueSO> contextClues)
+    {
+        var promptBuilder = new StringBuilder();
+        var storyBlueprint = GameManager.Instance.currentStory;
+
+        promptBuilder.AppendLine("你是一个侦探游戏中的AI助手“答案之书”。你的任务是根据我提供的【故事最终真相】和【相关背景资料】，来评估【玩家的陈述】是否符合事实。");
+        promptBuilder.AppendLine("你的回答必须严格遵循以下规则：");
+        promptBuilder.AppendLine("1. 你的回答必须是一个严格的JSON格式，不包含任何Markdown标记。");
+        promptBuilder.AppendLine("2. JSON对象必须包含 'evaluation' 和 'explanation' 两个字段。");
+        promptBuilder.AppendLine("3. 'evaluation' 字段的值必须是 'CompletelyCorrect', 'PartiallyCorrect', 'Incorrect', 'Irrelevant', 'Noncommittal' 之一。");
+        promptBuilder.AppendLine("4. 'explanation' 字段需要简短解释你做出该评估的原因。");
+        promptBuilder.AppendLine("\n---");
+
+        // 将全局故事真相作为最高优先级的上下文
+        if (storyBlueprint != null && !string.IsNullOrEmpty(storyBlueprint.fullStorySolution))
+        {
+            promptBuilder.AppendLine("【故事最终真相】");
+            promptBuilder.AppendLine(storyBlueprint.fullStorySolution);
+            promptBuilder.AppendLine();
+        }
+
+        // 将检索到的线索作为背景资料添加到Prompt中
+        for (int i = 0; i < contextClues.Count; i++)
+        {
+            promptBuilder.AppendLine($"【相关背景资料 {i + 1}: {contextClues[i].clueName}】");
+            promptBuilder.AppendLine(contextClues[i].llmPromptHint);
+            promptBuilder.AppendLine();
+        }
+
+        promptBuilder.AppendLine("---");
+        promptBuilder.AppendLine("【玩家的陈述】");
+        promptBuilder.AppendLine(playerStatement);
+        
+        promptBuilder.AppendLine("\n---");
+        promptBuilder.AppendLine("请根据以上所有信息和规则，输出你的JSON判断结果：");
+        
+        return promptBuilder.ToString();
+    }
+
+    #endregion
 } 

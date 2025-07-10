@@ -139,22 +139,32 @@ public class ClueUIPanel : Singleton<ClueUIPanel>
 
         if (string.IsNullOrEmpty(question) || !_unlockedClues.Contains(currentClue.clueID)) return;
 
-        // 5.1 缓存记录并在UI上显示“等待中”
+        // 缓存记录并在UI上显示“等待中”
         DialogueHistoryManager.Instance.RegisterPendingQuestion(currentClue.clueID, question);
         recordArea.AddPendingRecord(question);
         
-        // 调用推理服务
-        _inferenceService.AskQuestionAboutClue(GameManager.Instance.currentStory, currentClue, question, (result) =>
+        // 定义统一的回调逻辑
+        Action<InferenceResult> onComplete = (result) =>
         {
-            // 5.2 提交完整记录
+            // 提交完整记录
             DialogueHistoryManager.Instance.CommitCompletedQuestion(question, result);
 
-            // 5.3 如果返回结果时，玩家还在看这一页，则刷新
-            if (allClues[_currentPageIndex].clueID == currentClue.clueID)
+            // 如果返回结果时，玩家还在看这一页，则刷新
+            if (_isPanelOpen && allClues.Count > _currentPageIndex && allClues[_currentPageIndex].clueID == currentClue.clueID)
             {
                 recordArea.RefreshDisplay(currentClue.clueID);
             }
-        });
+        };
+
+        // 根据线索的设置，调用不同的服务
+        if (currentClue.useGlobalRAG)
+        {
+            _inferenceService.EvaluateGlobalStatement(GameManager.Instance.currentStory, currentClue, question, onComplete);
+        }
+        else
+        {
+            _inferenceService.AskQuestionAboutClue(GameManager.Instance.currentStory, currentClue, question, onComplete);
+        }
 
         questionInput.text = "";
     }
@@ -197,6 +207,16 @@ public class ClueUIPanel : Singleton<ClueUIPanel>
         if (!_unlockedClues.Contains(clueId))
         {
             _unlockedClues.Add(clueId);
+
+            // 将新解锁的线索添加到向量数据库
+            ClueSO unlockedClue = allClues.Find(c => c.clueID == clueId);
+            if (unlockedClue != null)
+            {
+                VectorDatabaseService.Instance.AddClue(unlockedClue, 
+                    () => Debug.Log($"线索 '{unlockedClue.clueName}' 已成功提交至向量数据库。"),
+                    (error) => Debug.LogError($"线索 '{unlockedClue.clueName}' 提交至向量数据库失败: {error}"));
+            }
+
             // 如果解锁的是当前页，则刷新以显示新内容
             if (allClues[_currentPageIndex].clueID == clueId)
             {
